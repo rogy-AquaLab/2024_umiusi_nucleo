@@ -95,7 +95,6 @@ int main() {
         bldcs[i].period_ms(20);
         servos[i].period_ms(20);
     }
-    // Wake up BLDCs
     wake_up_bldcs(bldcs);
     // fake; TODO
     uint16_t flexsensor1_value = 0xF001;
