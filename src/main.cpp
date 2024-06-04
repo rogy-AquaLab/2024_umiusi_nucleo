@@ -55,6 +55,8 @@
 
 #endif // SERVO4_PIN
 
+constexpr size_t THRUSTER_NUM = 4;
+
 struct DeferedDelay {
     const uint16_t duration_ms;
 
@@ -65,14 +67,23 @@ struct DeferedDelay {
     }
 };
 
+// Takes 2 seconds
+void wake_up_bldcs(PwmOut bldc_power_pwms[]) {
+    DeferedDelay _delay(2000);
+    for (size_t i = 0; i < THRUSTER_NUM; ++i) {
+        bldc_power_pwms[i].pulsewidth_us(100);
+    }
+    return;
+}
+
 int main() {
-    PwmOut bldcs[4] = {
+    PwmOut bldcs[THRUSTER_NUM] = {
         PwmOut(BLDC1_PIN),
         PwmOut(BLDC2_PIN),
         PwmOut(BLDC3_PIN),
         PwmOut(BLDC4_PIN),
     };
-    PwmOut servos[4] = {
+    PwmOut servos[THRUSTER_NUM] = {
         PwmOut(SERVO1_PIN),
         PwmOut(SERVO2_PIN),
         PwmOut(SERVO3_PIN),
@@ -80,10 +91,12 @@ int main() {
     };
     BufferedSerial pc(USBTX, USBRX);
     // Init modules
-    for (size_t i = 0; i < 4; ++i) {
+    for (size_t i = 0; i < THRUSTER_NUM; ++i) {
         bldcs[i].period_ms(20);
         servos[i].period_ms(20);
     }
+    // Wake up BLDCs
+    wake_up_bldcs(bldcs);
     // fake; TODO
     uint16_t flexsensor1_value = 0xF001;
     uint16_t flexsensor2_value = 0xF020;
@@ -104,14 +117,14 @@ int main() {
             // write
             uint8_t buffer[16] = {};
             pc.read(buffer, 16);
-            for (size_t i = 0; i < 4; ++i) {
+            for (size_t i = 0; i < THRUSTER_NUM; ++i) {
                 uint16_t pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0]);
                 uint16_t pulsewidth_us_msb = static_cast<uint16_t>(buffer[i * 2 + 1]);
                 bldcs[i].pulsewidth_us(
                     (pulsewidth_us_lsb << 0) | (pulsewidth_us_msb << 8)
                 );
             }
-            for (size_t i = 0; i < 4; ++i) {
+            for (size_t i = 0; i < THRUSTER_NUM; ++i) {
                 uint16_t pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0 + 8]);
                 uint16_t pulsewidth_us_msb = static_cast<uint16_t>(buffer[i * 2 + 1 + 8]);
                 servos[i].pulsewidth_us(
