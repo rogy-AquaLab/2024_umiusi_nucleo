@@ -7,6 +7,12 @@
 // targets/TARGET_STM/TARGET_STM32F3/TARGET_STM32F3x8/TARGET_NUCLEO_F303K8/PeripheralPins.c
 // in https://github.com/ARMmbed/mbed-os/tree/869f0d7
 
+#ifndef INIT_PIN
+
+    #define INIT_PIN PA_1
+
+#endif // INIT_PIN
+
 #ifndef BLDC1_PIN
 
     #define BLDC1_PIN PA_12 // TIM1_CH2N
@@ -77,6 +83,8 @@ void wake_up_bldcs(PwmOut bldc_power_pwms[]) {
 }
 
 int main() {
+    DigitalOut init_status(INIT_PIN);
+
     PwmOut bldcs[THRUSTER_NUM] = {
         PwmOut(BLDC1_PIN),
         PwmOut(BLDC2_PIN),
@@ -91,6 +99,7 @@ int main() {
     };
     BufferedSerial pc(USBTX, USBRX);
     // Init modules
+    init_status = 1;
     for (size_t i = 0; i < THRUSTER_NUM; ++i) {
         bldcs[i].period_ms(20);
         servos[i].period_ms(20);
