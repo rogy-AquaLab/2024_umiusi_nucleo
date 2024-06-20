@@ -131,10 +131,9 @@ int main() {
                 bldcs[i].pulsewidth_us(
                     (pulsewidth_us_lsb << 0) | (pulsewidth_us_msb << 8)
                 );
-            }
-            for (size_t i = 0; i < THRUSTER_NUM; ++i) {
-                uint16_t pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0 + 8]);
-                uint16_t pulsewidth_us_msb = static_cast<uint16_t>(buffer[i * 2 + 1 + 8]);
+                // FIXME: 8 == THRUSTER_NUM * 2
+                pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0 + 8]);
+                pulsewidth_us_msb = static_cast<uint16_t>(buffer[i * 2 + 1 + 8]);
                 servos[i].pulsewidth_us(
                     (pulsewidth_us_lsb << 0) | (pulsewidth_us_msb << 8)
                 );
