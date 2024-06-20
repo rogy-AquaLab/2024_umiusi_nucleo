@@ -1,3 +1,4 @@
+#include <array>
 #include <chrono>
 
 #include "mbed.h"
@@ -74,24 +75,23 @@ struct DeferedDelay {
 };
 
 // Takes 2 seconds
-void wake_up_bldcs(PwmOut bldc_power_pwms[]) {
+void wake_up_bldcs(std::array<PwmOut, THRUSTER_NUM>& bldc_power_pwms) {
     DeferedDelay _delay(2000);
-    for (size_t i = 0; i < THRUSTER_NUM; ++i) {
-        bldc_power_pwms[i].pulsewidth_us(100);
+    for (PwmOut& bldc : bldc_power_pwms) {
+        bldc.pulsewidth_us(100);
     }
-    return;
 }
 
 int main() {
     DigitalOut init_status(INIT_PIN);
 
-    PwmOut bldcs[THRUSTER_NUM] = {
+    std::array<PwmOut, THRUSTER_NUM> bldcs{
         PwmOut(BLDC1_PIN),
         PwmOut(BLDC2_PIN),
         PwmOut(BLDC3_PIN),
         PwmOut(BLDC4_PIN),
     };
-    PwmOut servos[THRUSTER_NUM] = {
+    std::array<PwmOut, THRUSTER_NUM> servos{
         PwmOut(SERVO1_PIN),
         PwmOut(SERVO2_PIN),
         PwmOut(SERVO3_PIN),
