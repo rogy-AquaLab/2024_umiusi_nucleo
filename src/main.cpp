@@ -123,8 +123,8 @@ int main() {
         switch (header) {
         case 0: {
             // write
-            uint8_t buffer[16] = {};
-            pc.read(buffer, 16);
+            std::array<uint8_t, 16> buffer{}; // FIXME: 16 == THRUSTER_NUM * 2 * 2
+            pc.read(buffer.data(), 16);
             for (size_t i = 0; i < THRUSTER_NUM; ++i) {
                 uint16_t pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0]);
                 uint16_t pulsewidth_us_msb = static_cast<uint16_t>(buffer[i * 2 + 1]);
