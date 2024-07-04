@@ -134,37 +134,10 @@ public:
     }
 };
 
-// Takes 2 seconds
-void wake_up_bldcs(std::array<PwmOut, THRUSTER_NUM>& bldc_power_pwms) {
-    DeferedDelay _delay(2000);
-    for (PwmOut& bldc : bldc_power_pwms) {
-        bldc.pulsewidth_us(100);
-    }
-}
-
 int main() {
-    DigitalOut init_status(INIT_PIN);
-
-    std::array<PwmOut, THRUSTER_NUM> bldcs{
-        PwmOut(BLDC1_PIN),
-        PwmOut(BLDC2_PIN),
-        PwmOut(BLDC3_PIN),
-        PwmOut(BLDC4_PIN),
-    };
-    std::array<PwmOut, THRUSTER_NUM> servos{
-        PwmOut(SERVO1_PIN),
-        PwmOut(SERVO2_PIN),
-        PwmOut(SERVO3_PIN),
-        PwmOut(SERVO4_PIN),
-    };
+    Outputs        outputs;
     BufferedSerial pc(USBTX, USBRX);
-    // Init modules
-    init_status = 1;
-    for (size_t i = 0; i < THRUSTER_NUM; ++i) {
-        bldcs[i].period_ms(20);
-        servos[i].period_ms(20);
-    }
-    wake_up_bldcs(bldcs);
+    outputs.setup();
     // fake; TODO
     uint16_t flexsensor1_value = 0xF001;
     uint16_t flexsensor2_value = 0xF020;
@@ -185,19 +158,22 @@ int main() {
             // write
             std::array<uint8_t, 16> buffer{}; // FIXME: 16 == THRUSTER_NUM * 2 * 2
             pc.read(buffer.data(), 16);
+            std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM> pulsewidths_us{};
             for (size_t i = 0; i < THRUSTER_NUM; ++i) {
+                // bldc
                 uint16_t pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0]);
                 uint16_t pulsewidth_us_msb = static_cast<uint16_t>(buffer[i * 2 + 1]);
-                bldcs[i].pulsewidth_us(
-                    (pulsewidth_us_lsb << 0) | (pulsewidth_us_msb << 8)
-                );
-                // FIXME: 8 == THRUSTER_NUM * 2
-                pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0 + 8]);
-                pulsewidth_us_msb = static_cast<uint16_t>(buffer[i * 2 + 1 + 8]);
-                servos[i].pulsewidth_us(
-                    (pulsewidth_us_lsb << 0) | (pulsewidth_us_msb << 8)
-                );
+                pulsewidths_us[i].first    = (pulsewidth_us_lsb << 0)
+                                          | (pulsewidth_us_msb << 8);
+                // servo
+                pulsewidth_us_lsb
+                    = static_cast<uint16_t>(buffer[i * 2 + 0 + THRUSTER_NUM * 2]);
+                pulsewidth_us_msb
+                    = static_cast<uint16_t>(buffer[i * 2 + 1 + THRUSTER_NUM * 2]);
+                pulsewidths_us[i].second = (pulsewidth_us_lsb << 0)
+                                           | (pulsewidth_us_msb << 8);
             }
+            outputs.set_powers(pulsewidths_us);
         } break;
         case 1: {
             // read
