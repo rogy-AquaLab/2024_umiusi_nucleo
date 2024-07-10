@@ -1,7 +1,9 @@
 #include <array>
 #include <chrono>
 
+#include "defereddelay.hpp"
 #include "mbed.h"
+#include "outputs.hpp"
 #include "ThisThread.h"
 
 // Pin Map:
@@ -63,76 +65,6 @@
 #endif // SERVO4_PIN
 
 constexpr size_t THRUSTER_NUM = 4;
-
-struct DeferedDelay {
-    const uint16_t duration_ms;
-
-    DeferedDelay(uint16_t duration_ms) : duration_ms(duration_ms) {}
-
-    ~DeferedDelay() {
-        ThisThread::sleep_for(std::chrono::milliseconds(duration_ms));
-    }
-};
-
-class Outputs {
-private:
-    DigitalOut init_status;
-
-    std::array<PwmOut, THRUSTER_NUM> bldcs;
-    std::array<PwmOut, THRUSTER_NUM> servos;
-
-public:
-    // FIXME: ビルダーを与えたい
-    Outputs() :
-        init_status(INIT_PIN),
-        bldcs{
-            PwmOut(BLDC1_PIN), PwmOut(BLDC2_PIN), PwmOut(BLDC3_PIN), PwmOut(BLDC4_PIN)
-        },
-        servos{
-            PwmOut(SERVO1_PIN), PwmOut(SERVO2_PIN), PwmOut(SERVO3_PIN), PwmOut(SERVO4_PIN)
-        } {
-        for (size_t i = 0; i < THRUSTER_NUM; ++i) {
-            this->bldcs[i].period_ms(20);
-            this->bldcs[i].pulsewidth_us(0);
-            this->servos[i].period_ms(20);
-            this->servos[i].pulsewidth_us(0);
-        }
-    }
-
-    void activate() {
-        this->init_status.write(1);
-    }
-
-    void deactivate() {
-        this->init_status.write(0);
-    }
-
-    /// ESC の起動待ち
-    void wake_up() {
-        DeferedDelay _(2000);
-        for (PwmOut& bldc : this->bldcs) {
-            bldc.pulsewidth_us(100);
-        }
-    }
-
-    void setup() {
-        this->activate();
-        this->wake_up();
-    }
-
-    void set_powers(
-        const std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM >& pulsewidths_us
-    ) {
-        for (size_t i = 0; i < THRUSTER_NUM; ++i) {
-            const uint16_t& bldc_us  = pulsewidths_us[i].first;
-            const uint16_t& servo_us = pulsewidths_us[i].second;
-            // TODO: C++17にしたらこう書けるようになる
-            // const auto [bldc_us, servo_us] = pulsewidths_us[i];
-            this->bldcs[i].pulsewidth_us(bldc_us);
-            this->servos[i].pulsewidth_us(servo_us);
-        }
-    }
-};
 
 int main() {
     Outputs        outputs;
