@@ -1,5 +1,3 @@
-
-
 struct DeferedDelay {
     const uint16_t duration_ms;
 
