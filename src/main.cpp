@@ -1,7 +1,10 @@
 #include <array>
 #include <chrono>
+#include <cstdint>
 
+#include "AnalogIn.h"
 #include "mbed.h"
+#include "PinNames.h"
 #include "ThisThread.h"
 
 // Pin Map:
@@ -62,6 +65,30 @@
 
 #endif // SERVO4_PIN
 
+#ifndef FLEX1_PIN
+
+    #define FLEX1_PIN PB_1
+
+#endif // FLEX1_PIN
+
+#ifndef FLEX2_PIN
+
+    #define FLEX2_PIN PA_0
+
+#endif // FLEX2_PIN
+
+#ifndef CURRENT_PIN
+
+    #define CURRENT_PIN PA_5
+
+#endif // CURRENT_PIN
+
+#ifndef VOLTAGE_PIN
+
+    #define VOLTAGE_PIN PA_4
+
+#endif // VOLTAGE_PIN
+
 constexpr size_t THRUSTER_NUM = 4;
 
 struct DeferedDelay {
@@ -71,6 +98,51 @@ struct DeferedDelay {
 
     ~DeferedDelay() {
         ThisThread::sleep_for(std::chrono::milliseconds(duration_ms));
+    }
+};
+
+struct InputValues {
+    uint16_t flex1;
+    uint16_t flex2;
+    uint16_t current;
+    uint16_t voltage;
+
+    InputValues() = delete;
+
+    auto packet_data() const -> std::array<uint8_t, 8> {
+        return {
+            static_cast<uint8_t>((this->flex1 >> 0) & 0xFF),
+            static_cast<uint8_t>((this->flex1 >> 8) & 0xFF),
+            static_cast<uint8_t>((this->flex2 >> 0) & 0xFF),
+            static_cast<uint8_t>((this->flex2 >> 8) & 0xFF),
+            static_cast<uint8_t>((this->current >> 0) & 0xFF),
+            static_cast<uint8_t>((this->current >> 8) & 0xFF),
+            static_cast<uint8_t>((this->voltage >> 0) & 0xFF),
+            static_cast<uint8_t>((this->voltage >> 8) & 0xFF),
+        };
+    }
+};
+
+class Inputs {
+private:
+    mbed::AnalogIn flex1;
+    mbed::AnalogIn flex2;
+    mbed::AnalogIn current;
+    mbed::AnalogIn voltage;
+
+public:
+    // FIXME: ビルダーを与えたい
+    Inputs() :
+        flex1(FLEX1_PIN),
+        flex2(FLEX2_PIN),
+        current(CURRENT_PIN),
+        voltage(VOLTAGE_PIN) {}
+
+    auto read() -> InputValues {
+        return InputValues{ this->flex1.read_u16(),
+                            this->flex2.read_u16(),
+                            this->current.read_u16(),
+                            this->voltage.read_u16() };
     }
 };
 
@@ -135,14 +207,10 @@ public:
 };
 
 int main() {
+    Inputs         inputs;
     Outputs        outputs;
     BufferedSerial pc(USBTX, USBRX);
     outputs.setup();
-    // fake; TODO
-    uint16_t flexsensor1_value = 0xF001;
-    uint16_t flexsensor2_value = 0xF020;
-    uint16_t current_value     = 0x0CAE;
-    uint16_t voltage_value     = 0xAE00;
     while (true) {
         DeferedDelay _delay(10);
         pc.sync();
@@ -177,17 +245,8 @@ int main() {
         } break;
         case 1: {
             // read
-            uint8_t buffer[8] = {
-                static_cast<uint8_t>((flexsensor1_value >> 0) & 0xFF),
-                static_cast<uint8_t>((flexsensor1_value >> 8) & 0xFF),
-                static_cast<uint8_t>((flexsensor2_value >> 0) & 0xFF),
-                static_cast<uint8_t>((flexsensor2_value >> 8) & 0xFF),
-                static_cast<uint8_t>((current_value >> 0) & 0xFF),
-                static_cast<uint8_t>((current_value >> 8) & 0xFF),
-                static_cast<uint8_t>((voltage_value >> 0) & 0xFF),
-                static_cast<uint8_t>((voltage_value >> 8) & 0xFF),
-            };
-            pc.write(buffer, 8);
+            std::array<uint8_t, 8> buffer = inputs.read().packet_data();
+            pc.write(buffer.data(), 8);
         } break;
         case 0xFF:
             // quit
