@@ -3,11 +3,11 @@
 #include <cstdint>
 
 #include "AnalogIn.h"
-#include "CriticalSectionLock.h"
 #include "mbed.h"
+#include "Mutex.h"
 #include "PinNames.h"
 #include "ThisThread.h"
-#include "Ticker.h"
+#include "Thread.h"
 
 // Pin Map:
 // targets/TARGET_STM/TARGET_STM32F3/TARGET_STM32F3x8/TARGET_NUCLEO_F303K8/PeripheralPins.c
@@ -103,6 +103,20 @@ struct DeferedDelay {
     }
 };
 
+class MutexGuard {
+private:
+    rtos::Mutex& mutex;
+
+public:
+    MutexGuard(rtos::Mutex& mutex) : mutex(mutex) {
+        this->mutex.lock();
+    }
+
+    ~MutexGuard() {
+        this->mutex.unlock();
+    }
+};
+
 struct InputValues {
     uint16_t flex1;
     uint16_t flex2;
@@ -161,6 +175,7 @@ private:
     bool   set_values;
     // FIXME: std::optional使う
     InputValues values;
+    rtos::Mutex mutex;
 
 public:
     CachedInputs() : inputs(), set_values(false), values{ 0, 0, 0, 0 } {}
@@ -168,6 +183,7 @@ public:
     CachedInputs(Inputs&& i) : inputs(i), set_values(false), values{ 0, 0, 0, 0 } {}
 
     void read() {
+        MutexGuard _guard(this->mutex);
         if (!this->set_values) {
             this->set_values = true;
         }
@@ -175,7 +191,7 @@ public:
     }
 
     auto get() -> InputValues {
-        mbed::CriticalSectionLock _lock;
+        MutexGuard _guard(this->mutex);
         if (!this->set_values) {
             this->read();
         }
@@ -244,16 +260,30 @@ public:
 };
 
 int main() {
+    constexpr size_t INPUTS_THREAD_STACK_SIZE = 1024;
+
+    unsigned char inputs_thread_stack[INPUTS_THREAD_STACK_SIZE] = {};
+    rtos::Thread  inputs_thread(
+        osPriorityNormal, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack
+    );
+
     CachedInputs   inputs;
-    mbed::Ticker   inputs_tick;
     Outputs        outputs;
     BufferedSerial pc(USBTX, USBRX);
-    inputs_tick.attach(
-        [&inputs]() {
+
+    osStatus status = inputs_thread.start([&inputs]() {
+        while (true) {
             inputs.read();
-        },
-        10ms
-    );
+            ThisThread::sleep_for(10ms);
+        }
+    });
+    if (status != osOK) {
+        // 本来ここに入ることはあってはならないが、一応書いておく
+        // スレッドを開始することができなかったので、入力が読み取られなくなる
+        // そのため、一度だけ値を読んでおくことにする
+        // 得られる値を見て実行状況を判断すること
+        inputs.read();
+    }
     outputs.setup();
     while (true) {
         DeferedDelay _delay(10);
@@ -301,5 +331,5 @@ int main() {
         }
     }
 END:
-    return 0;
+    return status;
 }
