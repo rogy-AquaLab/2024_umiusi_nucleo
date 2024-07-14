@@ -7,6 +7,7 @@
 #include "mbed.h"
 #include "PinNames.h"
 #include "ThisThread.h"
+#include "Ticker.h"
 
 // Pin Map:
 // targets/TARGET_STM/TARGET_STM32F3/TARGET_STM32F3x8/TARGET_NUCLEO_F303K8/PeripheralPins.c
@@ -243,9 +244,16 @@ public:
 };
 
 int main() {
-    Inputs         inputs;
+    CachedInputs   inputs;
+    mbed::Ticker   inputs_tick;
     Outputs        outputs;
     BufferedSerial pc(USBTX, USBRX);
+    inputs_tick.attach(
+        [&inputs]() {
+            inputs.read();
+        },
+        10ms
+    );
     outputs.setup();
     while (true) {
         DeferedDelay _delay(10);
@@ -281,7 +289,7 @@ int main() {
         } break;
         case 1: {
             // read
-            std::array<uint8_t, 8> buffer = inputs.read().packet_data();
+            std::array<uint8_t, 8> buffer = inputs.get().packet_data();
             pc.write(buffer.data(), 8);
         } break;
         case 0xFF:
