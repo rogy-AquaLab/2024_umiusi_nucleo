@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "AnalogIn.h"
+#include "CriticalSectionLock.h"
 #include "mbed.h"
 #include "PinNames.h"
 #include "ThisThread.h"
@@ -138,11 +139,46 @@ public:
         current(CURRENT_PIN),
         voltage(VOLTAGE_PIN) {}
 
+    void read(InputValues& values) {
+        values.flex1   = this->flex1.read_u16();
+        values.flex2   = this->flex2.read_u16();
+        values.current = this->current.read_u16();
+        values.voltage = this->voltage.read_u16();
+    }
+
     auto read() -> InputValues {
         return InputValues{ this->flex1.read_u16(),
                             this->flex2.read_u16(),
                             this->current.read_u16(),
                             this->voltage.read_u16() };
+    }
+};
+
+class CachedInputs {
+private:
+    Inputs inputs;
+    bool   set_values;
+    // FIXME: std::optional使う
+    InputValues values;
+
+public:
+    CachedInputs() : inputs(), set_values(false), values{ 0, 0, 0, 0 } {}
+
+    CachedInputs(Inputs&& i) : inputs(i), set_values(false), values{ 0, 0, 0, 0 } {}
+
+    void read() {
+        if (!this->set_values) {
+            this->set_values = true;
+        }
+        this->inputs.read(this->values);
+    }
+
+    auto get() -> InputValues {
+        mbed::CriticalSectionLock _lock;
+        if (!this->set_values) {
+            this->read();
+        }
+        return this->values;
     }
 };
 
