@@ -7,8 +7,6 @@
 // targets/TARGET_STM/TARGET_STM32F3/TARGET_STM32F3x8/TARGET_NUCLEO_F303K8/PeripheralPins.c
 // in https://github.com/ARMmbed/mbed-os/tree/869f0d7
 
-constexpr size_t THRUSTER_NUM = 4;
-
 int main() {
     Outputs        outputs;
     BufferedSerial pc(USBTX, USBRX);
