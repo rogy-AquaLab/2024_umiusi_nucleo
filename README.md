@@ -1,6 +1,6 @@
-# 2024_cavolinia_nucleo
+# 2024_umiusi_nucleo
 
-シロカメガイの足
+ウミウシの足
 
 ## Flow of data
 
