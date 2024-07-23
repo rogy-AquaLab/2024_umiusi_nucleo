@@ -1,5 +1,5 @@
-#ifndef DEFEREDDELAY_HPP
-#define DEFEREDDELAY_HPP
+#ifndef DEFERED_DELAY_HPP
+#define DEFERED_DELAY_HPP
 
 #include "ThisThread.h"
 #include <chrono>
@@ -14,4 +14,4 @@ struct DeferedDelay {
     }
 };
 
-#endif // DEFEREDDELAY_HPP
+#endif // DEFERED_DELAY_HPP

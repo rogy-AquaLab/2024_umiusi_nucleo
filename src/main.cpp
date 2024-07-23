@@ -4,7 +4,7 @@
 #include "ThisThread.h"
 #include "Thread.h"
 
-#include "umiusi/defereddelay.hpp"
+#include "umiusi/defered_delay.hpp"
 #include "umiusi/inputs.hpp"
 #include "umiusi/outputs.hpp"
 

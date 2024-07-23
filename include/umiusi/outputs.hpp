@@ -2,7 +2,7 @@
 #define OUTPUTS_HPP
 
 #include "mbed.h"
-#include "umiusi/defereddelay.hpp"
+#include "umiusi/defered_delay.hpp"
 #include <array>
 #include <chrono>
 
