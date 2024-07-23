@@ -26,11 +26,10 @@
 #endif // VOLTAGE_PIN
 
 #include <array>
+#include <mutex>
 #include <stdint.h>
 
 #include "AnalogIn.h"
-
-#include "umiusi/mutex_guard.hpp"
 
 struct InputValues {
     uint16_t flex1;
@@ -98,7 +97,7 @@ public:
     CachedInputs(Inputs&& i) : inputs(i), set_values(false), values{ 0, 0, 0, 0 } {}
 
     void read() {
-        MutexGuard _guard(this->mutex);
+        std::lock_guard<rtos::Mutex> _guard(this->mutex);
         if (!this->set_values) {
             this->set_values = true;
         }
@@ -106,7 +105,7 @@ public:
     }
 
     auto get() -> InputValues {
-        MutexGuard _guard(this->mutex);
+        std::lock_guard<rtos::Mutex> _guard(this->mutex);
         if (!this->set_values) {
             this->read();
         }
