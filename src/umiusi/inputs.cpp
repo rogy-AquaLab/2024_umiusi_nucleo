@@ -4,6 +4,14 @@
 
 #include "umiusi/inputs.hpp"
 
+InputValues::InputValues(
+    uint16_t flex1, uint16_t flex2, uint16_t current, uint16_t voltage
+) :
+    flex1(flex1),
+    flex2(flex2),
+    current(current),
+    voltage(voltage) {}
+
 auto InputValues::packet_data() const -> std::array<uint8_t, 8> {
     return {
         static_cast<uint8_t>((this->flex1 >> 0) & 0xFF),

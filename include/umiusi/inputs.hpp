@@ -37,6 +37,7 @@ struct InputValues {
     uint16_t voltage;
 
     InputValues() = delete;
+    InputValues(uint16_t flex1, uint16_t flex2, uint16_t current, uint16_t voltage);
 
     auto packet_data() const -> std::array<uint8_t, 8>;
 };

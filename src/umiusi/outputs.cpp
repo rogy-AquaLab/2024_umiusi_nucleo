@@ -44,10 +44,10 @@ void Outputs::set_powers(
     const std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM >& pulsewidths_us
 ) {
     for (size_t i = 0; i < THRUSTER_NUM; ++i) {
-        const uint16_t& bldc_us  = pulsewidths_us[i].first;
-        const uint16_t& servo_us = pulsewidths_us[i].second;
+        // const uint16_t& bldc_us  = pulsewidths_us[i].first;
+        // const uint16_t& servo_us = pulsewidths_us[i].second;
         // TODO: C++17にしたらこう書けるようになる
-        // const auto [bldc_us, servo_us] = pulsewidths_us[i];
+        const auto [bldc_us, servo_us] = pulsewidths_us[i];
         this->bldcs[i].pulsewidth_us(bldc_us);
         this->servos[i].pulsewidth_us(servo_us);
     }
