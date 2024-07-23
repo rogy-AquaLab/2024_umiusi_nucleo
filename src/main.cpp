@@ -1,21 +1,43 @@
-#include "mbed.h"
-#include "umiusi/defereddelay.hpp"
-#include "umiusi/outputs.hpp"
 #include <array>
+#include <cstdint>
+
+#include "ThisThread.h"
+#include "Thread.h"
+
+#include "umiusi/defereddelay.hpp"
+#include "umiusi/inputs.hpp"
+#include "umiusi/outputs.hpp"
 
 // Pin Map:
 // targets/TARGET_STM/TARGET_STM32F3/TARGET_STM32F3x8/TARGET_NUCLEO_F303K8/PeripheralPins.c
 // in https://github.com/ARMmbed/mbed-os/tree/869f0d7
 
 int main() {
+    constexpr size_t INPUTS_THREAD_STACK_SIZE = 1024;
+
+    unsigned char inputs_thread_stack[INPUTS_THREAD_STACK_SIZE] = {};
+    rtos::Thread  inputs_thread(
+        osPriorityNormal, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack
+    );
+
+    CachedInputs   inputs;
     Outputs        outputs;
     BufferedSerial pc(USBTX, USBRX);
+
+    osStatus status = inputs_thread.start([&inputs]() {
+        while (true) {
+            inputs.read();
+            rtos::ThisThread::sleep_for(10ms);
+        }
+    });
+    if (status != osOK) {
+        // 本来ここに入ることはあってはならないが、一応書いておく
+        // スレッドを開始することができなかったので、入力が読み取られなくなる
+        // そのため、一度だけ値を読んでおくことにする
+        // 得られる値を見て実行状況を判断すること
+        inputs.read();
+    }
     outputs.setup();
-    // fake; TODO
-    uint16_t flexsensor1_value = 0xF001;
-    uint16_t flexsensor2_value = 0xF020;
-    uint16_t current_value     = 0x0CAE;
-    uint16_t voltage_value     = 0xAE00;
     while (true) {
         DeferedDelay _delay(10);
         pc.sync();
@@ -50,17 +72,8 @@ int main() {
         } break;
         case 1: {
             // read
-            uint8_t buffer[8] = {
-                static_cast<uint8_t>((flexsensor1_value >> 0) & 0xFF),
-                static_cast<uint8_t>((flexsensor1_value >> 8) & 0xFF),
-                static_cast<uint8_t>((flexsensor2_value >> 0) & 0xFF),
-                static_cast<uint8_t>((flexsensor2_value >> 8) & 0xFF),
-                static_cast<uint8_t>((current_value >> 0) & 0xFF),
-                static_cast<uint8_t>((current_value >> 8) & 0xFF),
-                static_cast<uint8_t>((voltage_value >> 0) & 0xFF),
-                static_cast<uint8_t>((voltage_value >> 8) & 0xFF),
-            };
-            pc.write(buffer, 8);
+            std::array<uint8_t, 8> buffer = inputs.get().packet_data();
+            pc.write(buffer.data(), 8);
         } break;
         case 0xFF:
             // quit
@@ -71,5 +84,5 @@ int main() {
         }
     }
 END:
-    return 0;
+    return status;
 }
