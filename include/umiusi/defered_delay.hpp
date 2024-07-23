@@ -1,8 +1,9 @@
 #ifndef DEFERED_DELAY_HPP
 #define DEFERED_DELAY_HPP
 
-#include "ThisThread.h"
 #include <chrono>
+
+#include "ThisThread.h"
 
 struct DeferedDelay {
     const uint16_t duration_ms;

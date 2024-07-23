@@ -1,10 +1,12 @@
 #ifndef OUTPUTS_HPP
 #define OUTPUTS_HPP
 
-#include "mbed.h"
-#include "umiusi/defered_delay.hpp"
 #include <array>
-#include <chrono>
+
+#include <DigitalOut.h>
+#include <PwmOut.h>
+
+#include "umiusi/defered_delay.hpp"
 
 #ifndef INIT_PIN
 
@@ -64,9 +66,9 @@ constexpr size_t THRUSTER_NUM = 4;
 
 class Outputs {
 private:
-    DigitalOut                       init_status;
-    std::array<PwmOut, THRUSTER_NUM> bldcs;
-    std::array<PwmOut, THRUSTER_NUM> servos;
+    mbed::DigitalOut                       init_status;
+    std::array<mbed::PwmOut, THRUSTER_NUM> bldcs;
+    std::array<mbed::PwmOut, THRUSTER_NUM> servos;
 
 public:
     // FIXME: ビルダーを与えたい
@@ -82,10 +84,14 @@ public:
 
 Outputs::Outputs() :
     init_status(INIT_PIN),
-    bldcs{ PwmOut(BLDC1_PIN), PwmOut(BLDC2_PIN), PwmOut(BLDC3_PIN), PwmOut(BLDC4_PIN) },
-    servos{
-        PwmOut(SERVO1_PIN), PwmOut(SERVO2_PIN), PwmOut(SERVO3_PIN), PwmOut(SERVO4_PIN)
-    } {
+    bldcs{ mbed::PwmOut(BLDC1_PIN),
+           mbed::PwmOut(BLDC2_PIN),
+           mbed::PwmOut(BLDC3_PIN),
+           mbed::PwmOut(BLDC4_PIN) },
+    servos{ mbed::PwmOut(SERVO1_PIN),
+            mbed::PwmOut(SERVO2_PIN),
+            mbed::PwmOut(SERVO3_PIN),
+            mbed::PwmOut(SERVO4_PIN) } {
     for (size_t i = 0; i < THRUSTER_NUM; ++i) {
         bldcs[i].period_ms(20);
         bldcs[i].pulsewidth_us(0);
@@ -105,7 +111,7 @@ void Outputs::deactivate() {
 /// ESC の起動待ち
 void Outputs::wake_up() {
     DeferedDelay _(2000);
-    for (PwmOut& bldc : this->bldcs) {
+    for (mbed::PwmOut& bldc : this->bldcs) {
         bldc.pulsewidth_us(100);
     }
 }

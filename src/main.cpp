@@ -1,12 +1,16 @@
 #include <array>
+#include <chrono>
 #include <cstdint>
 
+#include "BufferedSerial.h"
 #include "ThisThread.h"
 #include "Thread.h"
 
 #include "umiusi/defered_delay.hpp"
 #include "umiusi/inputs.hpp"
 #include "umiusi/outputs.hpp"
+
+using namespace std::chrono_literals;
 
 // Pin Map:
 // targets/TARGET_STM/TARGET_STM32F3/TARGET_STM32F3x8/TARGET_NUCLEO_F303K8/PeripheralPins.c
@@ -20,9 +24,9 @@ int main() {
         osPriorityNormal, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack
     );
 
-    CachedInputs   inputs;
-    Outputs        outputs;
-    BufferedSerial pc(USBTX, USBRX);
+    CachedInputs         inputs;
+    Outputs              outputs;
+    mbed::BufferedSerial pc(USBTX, USBRX);
 
     osStatus status = inputs_thread.start([&inputs]() {
         while (true) {
@@ -47,7 +51,7 @@ int main() {
             continue;
         }
         // なぜかこれがないと動かない
-        ThisThread::sleep_for(20ms);
+        rtos::ThisThread::sleep_for(20ms);
         switch (header) {
         case 0: {
             // write
