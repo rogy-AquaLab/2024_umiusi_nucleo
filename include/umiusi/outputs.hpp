@@ -6,6 +6,10 @@
 #include <DigitalOut.h>
 #include <PwmOut.h>
 
+// Pin Map:
+// targets/TARGET_STM/TARGET_STM32F3/TARGET_STM32F3x8/TARGET_NUCLEO_F303K8/PeripheralPins.c
+// in https://github.com/ARMmbed/mbed-os/tree/869f0d7
+
 #ifndef INIT_PIN
 
     #define INIT_PIN PA_1

@@ -12,10 +12,6 @@
 
 using namespace std::chrono_literals;
 
-// Pin Map:
-// targets/TARGET_STM/TARGET_STM32F3/TARGET_STM32F3x8/TARGET_NUCLEO_F303K8/PeripheralPins.c
-// in https://github.com/ARMmbed/mbed-os/tree/869f0d7
-
 int main() {
     constexpr size_t INPUTS_THREAD_STACK_SIZE = 1024;
 
