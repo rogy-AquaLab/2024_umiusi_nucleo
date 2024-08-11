@@ -20,12 +20,6 @@ private:
     State       _state;
     rtos::Mutex state_mutex;
 
-    void reset_outputs() {
-        static constexpr std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM>
-            reset_pulsewidths_us{};
-        this->outputs.set_powers(reset_pulsewidths_us);
-    }
-
     void set_state(State s) {
         std::lock_guard _guard(this->state_mutex);
         this->_state = s;
@@ -47,7 +41,7 @@ public:
     }
 
     void suspend() {
-        this->reset_outputs();
+        this->outputs.reset();
         this->set_state(State::SUSPEND);
         this->outputs.deactivate();
     }
@@ -57,6 +51,7 @@ public:
             return;
         }
         this->set_state(State::INITIALIZING);
+        this->outputs.reset();
         this->outputs.setup();
         if (this->state() == State::INITIALIZING) {
             // setup前後で値が変化する可能性がある
@@ -143,7 +138,7 @@ int main() {
         case 0xFE: {
             // read state
             if (output.state() == State::INITIALIZING) {
-                return osOK;
+                continue;
             }
             // TODO: handle osStatus
             osStatus _ = setup_thread.start([&output]() {
