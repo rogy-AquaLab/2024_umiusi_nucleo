@@ -91,8 +91,9 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram
-    Initializing --> Running
-    Running --> Suspend
-    Running --> Initializing
-    Suspend --> Initializing
+    Initializing --> Running: init complete
+    Initializing --> Suspend: abort initializing
+    Running --> Suspend: no input, or suspend by user
+    Running --> Initializing: restart by user
+    Suspend --> Initializing: restart by user
 ```
