@@ -91,6 +91,7 @@ int main() {
         // 得られる値を見て実行状況を判断すること
         inputs.read();
     }
+    int no_input_count = 0;
     while (true) {
         DeferedDelay _delay(10);
         pc.sync();
@@ -98,9 +99,14 @@ int main() {
         // TODO: timeout
         ssize_t read = pc.read(&header, 1);
         if (read < 1) {
-            output.suspend();
+            no_input_count += 1;
+            // FIXME: rtos::Timeout使いたい
+            if (no_input_count > 50) {
+                output.suspend();
+            }
             continue;
         }
+        no_input_count = 0;
         // なぜかこれがないと動かない
         rtos::ThisThread::sleep_for(20ms);
         switch (header) {
