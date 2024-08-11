@@ -14,17 +14,65 @@
 
 using namespace std::chrono_literals;
 
+class OutputMachine {
+private:
+    Outputs     outputs;
+    State       _state;
+    rtos::Mutex state_mutex;
+
+    void reset_outputs() {
+        static constexpr std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM>
+            reset_pulsewidths_us{};
+        this->outputs.set_powers(reset_pulsewidths_us);
+    }
+
+    void set_state(State s) {
+        std::lock_guard _guard(this->state_mutex);
+        this->_state = s;
+    }
+
+public:
+    auto state() -> State {
+        std::lock_guard _guard(this->state_mutex);
+        return this->_state;
+    }
+
+    void set_powers(
+        const std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM>& pulsewidths_us
+    ) {
+        if (this->state() != State::RUNNING) {
+            return;
+        }
+        this->outputs.set_powers(pulsewidths_us);
+    }
+
+    void suspend() {
+        this->reset_outputs();
+        this->set_state(State::SUSPEND);
+        this->outputs.deactivate();
+    }
+
+    void initialize() {
+        if (this->state() == State::INITIALIZING) {
+            return;
+        }
+        this->set_state(State::INITIALIZING);
+        this->outputs.setup();
+        if (this->state() == State::INITIALIZING) {
+            // setup前後で値が変化する可能性がある
+            this->set_state(State::RUNNING);
+        }
+    }
+};
+
 class Machine {
 private:
     static constexpr size_t INPUTS_THREAD_STACK_SIZE = 1024;
     static constexpr size_t SETUP_THREAD_STACK_SIZE  = 512;
 
     CachedInputs         inputs;
-    Outputs              outputs;
+    OutputMachine        output;
     mbed::BufferedSerial pc;
-
-    State       state;
-    rtos::Mutex state_mutex;
 
     std::array<unsigned char, SETUP_THREAD_STACK_SIZE>  setup_thread_stack;
     std::array<unsigned char, INPUTS_THREAD_STACK_SIZE> inputs_thread_stack;
@@ -32,21 +80,10 @@ private:
     rtos::Thread setup_thread;
     rtos::Thread inputs_thread;
 
-    void reset_outputs() {
-        static constexpr std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM> reset_pulsewidths_us{};
-        this->outputs.set_powers(reset_pulsewidths_us);
-    }
-
     void op_write_outputs() {
         std::array<uint8_t, 16> buffer{}; // FIXME: 16 == THRUSTER_NUM * 2 * 2
         pc.read(buffer.data(), 16);
         std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM> pulsewidths_us{};
-        {
-            std::lock_guard<rtos::Mutex> _guard(this->state_mutex);
-            if (this->state != State::RUNNING) {
-                return;
-            }
-        }
         for (size_t i = 0; i < THRUSTER_NUM; ++i) {
             // bldc
             uint16_t pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0]);
@@ -60,7 +97,7 @@ private:
             pulsewidths_us[i].second = (pulsewidth_us_lsb << 0)
                                        | (pulsewidth_us_msb << 8);
         }
-        outputs.set_powers(pulsewidths_us);
+        this->output.set_powers(pulsewidths_us);
     }
 
     void op_read_inputs() {
@@ -69,41 +106,29 @@ private:
     }
 
     void op_read_state() {
-        std::lock_guard<rtos::Mutex> _guard(this->state_mutex);
-        uint8_t                      state_val = static_cast<uint8_t>(this->state);
+        uint8_t state_val = static_cast<uint8_t>(this->output.state());
         this->pc.write(&state_val, 1);
     }
 
     auto op_trigger_setup() -> osStatus {
-        std::lock_guard<rtos::Mutex> _guard(this->state_mutex);
-        if (this->state == State::INITIALIZING) {
+        if (this->output.state() == State::INITIALIZING) {
             return osOK;
         }
-        this->state = State::INITIALIZING;
-        this->reset_outputs();
-        return this->setup_thread.start([this]() {
-            this->outputs.setup();
-            {
-                std::lock_guard<rtos::Mutex> _guard(this->state_mutex);
-                this->state = State::RUNNING;
-            }
+        OutputMachine* om = &this->output;
+        return this->setup_thread.start([om]() {
+            om->initialize();
         });
     }
 
     void op_suspend() {
-        std::lock_guard<rtos::Mutex> _guard(this->state_mutex);
-        this->state = State::SUSPEND;
-        this->reset_outputs();
-        this->outputs.deactivate();
+        this->output.suspend();
     }
 
 public:
     explicit Machine() :
         inputs(),
-        outputs(),
+        output(),
         pc(USBTX, USBRX),
-        state(State::INITIALIZING),
-        state_mutex(),
         setup_thread_stack(),
         inputs_thread_stack(),
         setup_thread(
