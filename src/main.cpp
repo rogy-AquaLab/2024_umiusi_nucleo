@@ -4,6 +4,7 @@
 #include <mutex>
 
 #include "BufferedSerial.h"
+#include "EventFlags.h"
 #include "ThisThread.h"
 #include "Thread.h"
 
@@ -64,13 +65,14 @@ public:
 
 int main() {
     constexpr size_t INPUTS_THREAD_STACK_SIZE = 1024;
-    constexpr size_t SETUP_THREAD_STACK_SIZE  = 512;
+    constexpr size_t SETUP_THREAD_STACK_SIZE  = 1024;
 
     CachedInputs         inputs{};
     OutputMachine        output{};
     mbed::BufferedSerial pc(USBTX, USBRX);
 
     std::array<unsigned char, SETUP_THREAD_STACK_SIZE>  setup_thread_stack{};
+    rtos::EventFlags                                    trigger_setup{};
     std::array<unsigned char, INPUTS_THREAD_STACK_SIZE> inputs_thread_stack{};
 
     rtos::Thread setup_thread(
@@ -80,13 +82,21 @@ int main() {
         osPriorityNormal, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack.data()
     );
 
-    osStatus status = inputs_thread.start([&inputs]() {
+    // TODO: handle osStatus
+    setup_thread.start([&output, &trigger_setup]() {
+        while (true) {
+            trigger_setup.wait_any(1, osWaitForever, false);
+            output.initialize();
+            trigger_setup.clear();
+        }
+    });
+    osStatus inputs_thread_status = inputs_thread.start([&inputs]() {
         while (true) {
             inputs.read();
             rtos::ThisThread::sleep_for(10ms);
         }
     });
-    if (status != osOK) {
+    if (inputs_thread_status != osOK) {
         // 本来ここに入ることはあってはならないが、一応書いておく
         // スレッドを開始することができなかったので、入力が読み取られなくなる
         // そのため、一度だけ値を読んでおくことにする
@@ -148,11 +158,7 @@ int main() {
             if (output.state() == State::INITIALIZING) {
                 continue;
             }
-            OutputMachine* om = &output;
-            // TODO: handle osStatus
-            setup_thread.start([om]() {
-                om->initialize();
-            });
+            trigger_setup.set(1);
         } break;
         case 0xFF:
             // suspend
