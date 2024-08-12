@@ -26,6 +26,8 @@ private:
     }
 
 public:
+    explicit OutputMachine() : outputs(), _state(State::SUSPEND), state_mutex() {}
+
     auto state() -> State {
         std::lock_guard _guard(this->state_mutex);
         return this->_state;
