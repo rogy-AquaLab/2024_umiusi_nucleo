@@ -144,13 +144,14 @@ int main() {
             pc.write(&state_val, 1);
         } break;
         case 0xFE: {
-            // read state
+            // (re)start
             if (output.state() == State::INITIALIZING) {
                 continue;
             }
+            OutputMachine* om = &output;
             // TODO: handle osStatus
-            osStatus _ = setup_thread.start([&output]() {
-                output.initialize();
+            setup_thread.start([om]() {
+                om->initialize();
             });
         } break;
         case 0xFF:
