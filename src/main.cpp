@@ -71,8 +71,8 @@ int main() {
     OutputMachine        output{};
     mbed::BufferedSerial pc(USBTX, USBRX);
 
-    unsigned char    setup_thread_stack[SETUP_THREAD_STACK_SIZE] = {};
     rtos::EventFlags trigger_setup{};
+    unsigned char    setup_thread_stack[SETUP_THREAD_STACK_SIZE]   = {};
     unsigned char    inputs_thread_stack[INPUTS_THREAD_STACK_SIZE] = {};
 
     rtos::Thread setup_thread(
