@@ -65,21 +65,21 @@ public:
 
 int main() {
     constexpr size_t INPUTS_THREAD_STACK_SIZE = 1024;
-    constexpr size_t SETUP_THREAD_STACK_SIZE  = 1024;
+    constexpr size_t SETUP_THREAD_STACK_SIZE  = 512;
 
     CachedInputs         inputs{};
     OutputMachine        output{};
     mbed::BufferedSerial pc(USBTX, USBRX);
 
-    std::array<unsigned char, SETUP_THREAD_STACK_SIZE>  setup_thread_stack{};
-    rtos::EventFlags                                    trigger_setup{};
-    std::array<unsigned char, INPUTS_THREAD_STACK_SIZE> inputs_thread_stack{};
+    unsigned char    setup_thread_stack[SETUP_THREAD_STACK_SIZE] = {};
+    rtos::EventFlags trigger_setup{};
+    unsigned char    inputs_thread_stack[INPUTS_THREAD_STACK_SIZE] = {};
 
     rtos::Thread setup_thread(
-        osPriorityNormal, SETUP_THREAD_STACK_SIZE, setup_thread_stack.data()
+        osPriorityBelowNormal, SETUP_THREAD_STACK_SIZE, setup_thread_stack
     );
     rtos::Thread inputs_thread(
-        osPriorityNormal, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack.data()
+        osPriorityBelowNormal, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack
     );
 
     // TODO: handle osStatus
@@ -103,7 +103,6 @@ int main() {
         // 得られる値を見て実行状況を判断すること
         inputs.read();
     }
-    int no_input_count = 0;
     while (true) {
         DeferedDelay _delay(10);
         pc.sync();
@@ -111,14 +110,8 @@ int main() {
         // TODO: timeout
         ssize_t read = pc.read(&header, 1);
         if (read < 1) {
-            no_input_count += 1;
-            // FIXME: rtos::Timeout使いたい
-            if (no_input_count > 50) {
-                output.suspend();
-            }
             continue;
         }
-        no_input_count = 0;
         // なぜかこれがないと動かない
         rtos::ThisThread::sleep_for(20ms);
         switch (header) {
