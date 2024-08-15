@@ -41,11 +41,17 @@ void Outputs::setup() {
 }
 
 void Outputs::set_powers(
-    const std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM >& pulsewidths_us
+    const std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM>& pulsewidths_us
 ) {
     for (size_t i = 0; i < THRUSTER_NUM; ++i) {
         const auto [bldc_us, servo_us] = pulsewidths_us[i];
         this->bldcs[i].pulsewidth_us(bldc_us);
         this->servos[i].pulsewidth_us(servo_us);
     }
+}
+
+void Outputs::reset() {
+    static constexpr std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM>
+        reset_pulsewidths_us{};
+    this->set_powers(reset_pulsewidths_us);
 }
