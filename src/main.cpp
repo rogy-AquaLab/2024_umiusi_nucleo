@@ -1,5 +1,4 @@
 #include <array>
-#include <chrono>
 #include <cstdint>
 #include <mutex>
 
@@ -11,57 +10,8 @@
 #include "umiusi/defered_delay.hpp"
 #include "umiusi/inputs.hpp"
 #include "umiusi/outputs.hpp"
-#include "umiusi/state.hpp"
 
 using namespace std::chrono_literals;
-
-class OutputMachine {
-private:
-    Outputs     outputs;
-    State       _state;
-    rtos::Mutex state_mutex;
-
-    void set_state(State s) {
-        std::lock_guard _guard(this->state_mutex);
-        this->_state = s;
-    }
-
-public:
-    explicit OutputMachine() : outputs(), _state(State::SUSPEND), state_mutex() {}
-
-    auto state() -> State {
-        std::lock_guard _guard(this->state_mutex);
-        return this->_state;
-    }
-
-    void set_powers(
-        const std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM>& pulsewidths_us
-    ) {
-        if (this->state() != State::RUNNING) {
-            return;
-        }
-        this->outputs.set_powers(pulsewidths_us);
-    }
-
-    void suspend() {
-        this->outputs.reset();
-        this->set_state(State::SUSPEND);
-        this->outputs.deactivate();
-    }
-
-    void initialize() {
-        if (this->state() == State::INITIALIZING) {
-            return;
-        }
-        this->set_state(State::INITIALIZING);
-        this->outputs.reset();
-        this->outputs.setup();
-        if (this->state() == State::INITIALIZING) {
-            // setup前後で値が変化する可能性がある
-            this->set_state(State::RUNNING);
-        }
-    }
-};
 
 int main() {
     constexpr size_t INPUTS_THREAD_STACK_SIZE = 1024;

@@ -2,9 +2,13 @@
 #define OUTPUTS_HPP
 
 #include <array>
+#include <mutex>
 
 #include <DigitalOut.h>
+#include <Mutex.h>
 #include <PwmOut.h>
+
+#include "umiusi/state.hpp"
 
 // Pin Map:
 // targets/TARGET_STM/TARGET_STM32F3/TARGET_STM32F3x8/TARGET_NUCLEO_F303K8/PeripheralPins.c
@@ -86,6 +90,24 @@ public:
         const std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM>& pulsewidths_us
     );
     void reset();
+};
+
+class OutputMachine {
+private:
+    Outputs     outputs;
+    State       _state;
+    rtos::Mutex state_mutex;
+
+    void set_state(State s);
+
+public:
+    explicit OutputMachine();
+    auto state() -> State;
+    void set_powers(
+        const std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM>& pulsewidths_us
+    );
+    void suspend();
+    void initialize();
 };
 
 #endif
