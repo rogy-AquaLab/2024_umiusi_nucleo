@@ -1,12 +1,13 @@
 #ifndef DEFERED_DELAY_HPP
 #define DEFERED_DELAY_HPP
 
+#include <chrono>
 #include <cstdint>
 
 struct DeferedDelay {
-    const uint16_t duration_ms;
+    const std::chrono::milliseconds duration;
 
-    DeferedDelay(uint16_t duration_ms);
+    DeferedDelay(std::chrono::milliseconds duration);
     ~DeferedDelay();
 };
 

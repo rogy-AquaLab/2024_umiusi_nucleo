@@ -1,6 +1,8 @@
 #include "umiusi/outputs.hpp"
 #include "umiusi/defered_delay.hpp"
 
+using namespace std::chrono_literals;
+
 Outputs::Outputs() :
     init_status(INIT_PIN),
     bldcs{ mbed::PwmOut(BLDC1_PIN),
@@ -29,7 +31,7 @@ void Outputs::deactivate() {
 
 /// ESC の起動待ち
 void Outputs::wake_up() {
-    DeferedDelay _(2000);
+    DeferedDelay _(2s);
     for (mbed::PwmOut& bldc : this->bldcs) {
         bldc.pulsewidth_us(100);
     }

@@ -104,7 +104,7 @@ int main() {
         inputs.read();
     }
     while (true) {
-        DeferedDelay _delay(10);
+        DeferedDelay _delay(10ms);
         pc.sync();
         uint8_t header = 0;
         // TODO: timeout

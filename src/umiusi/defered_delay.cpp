@@ -2,8 +2,8 @@
 #include "ThisThread.h"
 #include <chrono>
 
-DeferedDelay::DeferedDelay(uint16_t duration_ms) : duration_ms(duration_ms) {}
+DeferedDelay::DeferedDelay(std::chrono::milliseconds duration) : duration(duration) {}
 
 DeferedDelay::~DeferedDelay() {
-    rtos::ThisThread::sleep_for(std::chrono::milliseconds(duration_ms));
+    rtos::ThisThread::sleep_for(this->duration);
 }
