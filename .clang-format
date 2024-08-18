@@ -5,7 +5,7 @@ AccessModifierOffset: -4
 AlignAfterOpenBracket: BlockIndent
 AlignArrayOfStructures: None
 AlignConsecutiveAssignments:
-  Enabled: true
+  Enabled: false
   AcrossEmptyLines: false
   AcrossComments: false
   AlignCompound: false
@@ -36,7 +36,7 @@ AlignConsecutiveShortCaseStatements:
   Enabled: true
   AcrossEmptyLines: false
   AcrossComments: false
-  AlignCaseArrows: false
+  #  AlignCaseArrows: false
   AlignCaseColons: false
 
 AlignEscapedNewlines: Left
