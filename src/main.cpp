@@ -14,30 +14,38 @@
 using namespace std::chrono_literals;
 
 int main() {
-    constexpr size_t INPUTS_THREAD_STACK_SIZE = 1024;
-    constexpr size_t SETUP_THREAD_STACK_SIZE  = 512;
+    constexpr uint32_t TRIGGER_INITIALIZE_FLAG = 0b0001;
+    constexpr uint32_t RECEIVED_INPUT_FLAG = 0b0010;
+    constexpr size_t   INPUTS_THREAD_STACK_SIZE = 1024;
+    constexpr size_t   WATCH_THREAD_STACK_SIZE = 1024;
 
     CachedInputs         inputs{};
     OutputMachine        output{};
     mbed::BufferedSerial pc(USBTX, USBRX);
 
-    rtos::EventFlags trigger_setup{};
-    unsigned char    setup_thread_stack[SETUP_THREAD_STACK_SIZE]   = {};
+    rtos::EventFlags flags{};
+    unsigned char    watch_flags_thread_stack[WATCH_THREAD_STACK_SIZE] = {};
     unsigned char    inputs_thread_stack[INPUTS_THREAD_STACK_SIZE] = {};
 
-    rtos::Thread setup_thread(
-        osPriorityBelowNormal, SETUP_THREAD_STACK_SIZE, setup_thread_stack
+    rtos::Thread watch_flags_thread(
+        osPriorityBelowNormal, WATCH_THREAD_STACK_SIZE, watch_flags_thread_stack
     );
     rtos::Thread inputs_thread(
         osPriorityBelowNormal, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack
     );
-
     // TODO: handle osStatus
-    setup_thread.start([&output, &trigger_setup]() {
+    watch_flags_thread.start([&output, &flags]() {
+        constexpr uint32_t WATCH_FLAGS = TRIGGER_INITIALIZE_FLAG | RECEIVED_INPUT_FLAG;
         while (true) {
-            trigger_setup.wait_any(1, osWaitForever, false);
-            output.initialize();
-            trigger_setup.clear();
+            const uint32_t res = flags.wait_any_for(WATCH_FLAGS, 5s);
+            if ((res & TRIGGER_INITIALIZE_FLAG) != 0) {
+                output.initialize();
+            } else if ((res & RECEIVED_INPUT_FLAG) != 0) {
+                // do nothing
+            } else {
+                // received no inputs for 5s
+                output.suspend();
+            }
         }
     });
     osStatus inputs_thread_status = inputs_thread.start([&inputs]() {
@@ -57,11 +65,11 @@ int main() {
         DeferedDelay _delay(10ms);
         pc.sync();
         uint8_t header = 0;
-        // TODO: timeout
         ssize_t read = pc.read(&header, 1);
         if (read < 1) {
             continue;
         }
+        flags.set(RECEIVED_INPUT_FLAG);
         // なぜかこれがないと動かない
         rtos::ThisThread::sleep_for(20ms);
         switch (header) {
@@ -74,7 +82,7 @@ int main() {
                 // bldc
                 uint16_t pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0]);
                 uint16_t pulsewidth_us_msb = static_cast<uint16_t>(buffer[i * 2 + 1]);
-                pulsewidths_us[i].first    = (pulsewidth_us_lsb << 0)
+                pulsewidths_us[i].first = (pulsewidth_us_lsb << 0)
                                           | (pulsewidth_us_msb << 8);
                 // servo
                 pulsewidth_us_lsb
@@ -101,7 +109,7 @@ int main() {
             if (output.state() == State::INITIALIZING) {
                 continue;
             }
-            trigger_setup.set(1);
+            flags.set(TRIGGER_INITIALIZE_FLAG);
         } break;
         case 0xFF:
             // suspend
