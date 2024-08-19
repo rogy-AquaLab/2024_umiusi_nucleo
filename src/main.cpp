@@ -37,13 +37,13 @@ int main() {
     watch_flags_thread.start([&output, &flags]() {
         constexpr uint32_t WATCH_FLAGS = TRIGGER_INITIALIZE_FLAG | RECEIVED_INPUT_FLAG;
         while (true) {
-            const uint32_t res = flags.wait_any_for(WATCH_FLAGS, 5s);
+            const uint32_t res = flags.wait_any_for(WATCH_FLAGS, 1s);
             if ((res & TRIGGER_INITIALIZE_FLAG) != 0) {
                 output.initialize();
             } else if ((res & RECEIVED_INPUT_FLAG) != 0) {
                 // do nothing
             } else {
-                // received no inputs for 5s
+                // received no inputs for 1s
                 output.suspend();
             }
         }
