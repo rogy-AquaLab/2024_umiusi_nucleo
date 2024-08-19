@@ -16,6 +16,7 @@ using namespace std::chrono_literals;
 int main() {
     constexpr uint32_t TRIGGER_INITIALIZE_FLAG = 0b0001;
     constexpr uint32_t RECEIVED_INPUT_FLAG = 0b0010;
+    constexpr uint32_t TRIGGER_SUSPEND_FLAG = 0b0100;
     constexpr size_t   INPUTS_THREAD_STACK_SIZE = 1024;
     constexpr size_t   WATCH_THREAD_STACK_SIZE = 1024;
 
@@ -35,7 +36,7 @@ int main() {
     );
     // TODO: handle osStatus
     watch_flags_thread.start([&output, &flags]() {
-        constexpr uint32_t WATCH_FLAGS = TRIGGER_INITIALIZE_FLAG | RECEIVED_INPUT_FLAG;
+        constexpr uint32_t WATCH_FLAGS = TRIGGER_INITIALIZE_FLAG | RECEIVED_INPUT_FLAG | TRIGGER_SUSPEND_FLAG;
         while (true) {
             const uint32_t res = flags.wait_any_for(WATCH_FLAGS, 1s);
             if ((res & TRIGGER_INITIALIZE_FLAG) != 0) {
@@ -43,7 +44,7 @@ int main() {
             } else if ((res & RECEIVED_INPUT_FLAG) != 0) {
                 // do nothing
             } else {
-                // received no inputs for 1s
+                // trigger suspend; or received no inputs for 1s
                 output.suspend();
             }
         }
@@ -67,6 +68,7 @@ int main() {
         uint8_t header = 0;
         ssize_t read = pc.read(&header, 1);
         if (read < 1) {
+            flags.set(TRIGGER_SUSPEND_FLAG);
             continue;
         }
         flags.set(RECEIVED_INPUT_FLAG);
@@ -113,7 +115,7 @@ int main() {
         } break;
         case 0xFF:
             // suspend
-            output.suspend();
+            flags.set(TRIGGER_SUSPEND_FLAG);
             break;
         default:
             // unexpected
