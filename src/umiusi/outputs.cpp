@@ -1,5 +1,4 @@
 #include "umiusi/outputs.hpp"
-#include "umiusi/defered_delay.hpp"
 
 using namespace std::chrono_literals;
 
@@ -33,17 +32,6 @@ void Outputs::prepare_wake_up(){
     for (mbed::PwmOut& bldc : this->bldcs) {
         bldc.pulsewidth_us(100);
     }
-}
-
-/// ESC の起動待ち
-void Outputs::wake_up() {
-    DeferedDelay _(2s);
-    this->prepare_wake_up();
-}
-
-void Outputs::setup() {
-    this->activate();
-    this->wake_up();
 }
 
 void Outputs::set_powers(
@@ -87,19 +75,6 @@ void OutputMachine::suspend() {
     this->outputs.reset();
     this->set_state(State::SUSPEND);
     this->outputs.deactivate();
-}
-
-void OutputMachine::initialize() {
-    if (this->state() == State::INITIALIZING) {
-        return;
-    }
-    this->set_state(State::INITIALIZING);
-    this->outputs.reset();
-    this->outputs.setup();
-    if (this->state() == State::INITIALIZING) {
-        // setup前後で値が変化する可能性がある
-        this->set_state(State::RUNNING);
-    }
 }
 
 void OutputMachine::initialize_with_equeue(events::EventQueue& equeue){
