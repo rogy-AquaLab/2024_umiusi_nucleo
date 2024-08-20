@@ -20,7 +20,7 @@ int main() {
     CachedInputs         inputs{};
     OutputMachine        output{};
     mbed::BufferedSerial pc(USBTX, USBRX);
-    std::atomic_bool     received_input;
+    std::atomic_bool     received_order;
     pc.set_blocking(false);
     inputs.read();
 
@@ -83,13 +83,13 @@ int main() {
             return;
         }
     };
-    equeue.call_every(30ms, [&equeue, &pc, &received_input, &process_order]() {
+    equeue.call_every(30ms, [&equeue, &pc, &received_order, &process_order]() {
         std::uint8_t header = 0;
         ssize_t res = pc.read(&header, 1);
         if (res < 1) {
             return;
         }
-        received_input.store(true, std::memory_order_release);
+        received_order.store(true, std::memory_order_release);
         // FIXME: なぜか20msほど遅らせないとうまくいかない
         equeue.call_in(20ms, process_order, header);
     });
@@ -98,9 +98,9 @@ int main() {
         inputs.read();
     });
 
-    equeue.call_every(1s, [&received_input, &suspend_event]() {
-        const bool received = received_input.load(std::memory_order_acquire);
-        received_input.store(false, std::memory_order_release);
+    equeue.call_every(1s, [&received_order, &suspend_event]() {
+        const bool received = received_order.load(std::memory_order_acquire);
+        received_order.store(false, std::memory_order_release);
         if (!received) {
             suspend_event.call();
         }
