@@ -1,9 +1,11 @@
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <mutex>
 
 #include "BufferedSerial.h"
-#include "EventFlags.h"
+#include "events/Event.h"
+#include "events/EventQueue.h"
 #include "ThisThread.h"
 #include "Thread.h"
 
@@ -13,56 +15,50 @@
 
 using namespace std::chrono_literals;
 
+class WatchDog {
+private:
+    std::atomic_bool*      received_input;
+    events::Event<void()>* suspend_event;
+
+public:
+    WatchDog(std::atomic_bool* received_input, events::Event<void()>* suspend_event) :
+        received_input(received_input),
+        suspend_event(suspend_event) {}
+
+    void check() {
+        const bool received = this->received_input->load(std::memory_order_acquire);
+        if (!received) {
+            this->suspend_event->post();
+        }
+    }
+};
+
 int main() {
-    constexpr uint32_t TRIGGER_INITIALIZE_FLAG = 0b0001;
-    constexpr uint32_t RECEIVED_INPUT_FLAG = 0b0010;
-    constexpr uint32_t TRIGGER_SUSPEND_FLAG = 0b0100;
-    constexpr size_t   INITIALIZE_THREAD_STACK_SIZE = 512;
-    constexpr size_t   SUSPEND_THREAD_STACK_SIZE = 512;
-    constexpr size_t   INPUTS_THREAD_STACK_SIZE = 1024;
+    constexpr size_t EVENT_LOOP_THREAD_STACK_SIZE = 1024;
+    constexpr size_t INPUTS_THREAD_STACK_SIZE = 1024;
 
     CachedInputs         inputs{};
     OutputMachine        output{};
     mbed::BufferedSerial pc(USBTX, USBRX);
+    std::atomic_bool     received_input;
 
-    rtos::EventFlags flags{};
-    unsigned char    initialize_thread_stack[INITIALIZE_THREAD_STACK_SIZE] = {};
-    unsigned char    suspend_thread_stack[SUSPEND_THREAD_STACK_SIZE] = {};
-    unsigned char    inputs_thread_stack[INPUTS_THREAD_STACK_SIZE] = {};
+    unsigned char equeue_buffer[1024] = {};
+    unsigned char event_loop_thread_stack[EVENT_LOOP_THREAD_STACK_SIZE] = {};
+    unsigned char inputs_thread_stack[INPUTS_THREAD_STACK_SIZE] = {};
 
-    rtos::Thread initialize_thread(
-        osPriorityBelowNormal1, INITIALIZE_THREAD_STACK_SIZE, initialize_thread_stack
-    );
-    rtos::Thread suspend_thread(
-        osPriorityBelowNormal2, SUSPEND_THREAD_STACK_SIZE, suspend_thread_stack
+    events::EventQueue equeue(1024, equeue_buffer);
+    rtos::Thread       event_loop_thread(
+        osPriorityNormal,
+        EVENT_LOOP_THREAD_STACK_SIZE,
+        event_loop_thread_stack,
+        "event_loop"
     );
     rtos::Thread inputs_thread(
-        osPriorityBelowNormal3, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack
+        osPriorityBelowNormal3, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack, "inputs"
     );
     // TODO: handle osStatus
-    initialize_thread.start([&output, &flags]() {
-        while (true) {
-            const uint32_t res = flags.wait_any_for(TRIGGER_INITIALIZE_FLAG, 1s, false);
-            if (res & TRIGGER_INITIALIZE_FLAG) {
-                output.initialize();
-            }
-            flags.clear(TRIGGER_INITIALIZE_FLAG);
-        }
-    });
-    suspend_thread.start([&output, &flags]() {
-        constexpr uint32_t WATCH_FLAGS = TRIGGER_SUSPEND_FLAG | RECEIVED_INPUT_FLAG;
-        while (true) {
-            const uint32_t res = flags.wait_any_for(WATCH_FLAGS, 1s, false);
-            const bool     trigger_suspend = (res & TRIGGER_SUSPEND_FLAG) != 0;
-            const bool     received_input = (res & RECEIVED_INPUT_FLAG) != 0;
-            if (trigger_suspend || !received_input) {
-                output.suspend();
-            } else {
-                // do nothing
-            }
-            flags.clear(WATCH_FLAGS);
-        }
-    });
+    event_loop_thread.start(mbed::callback(&equeue, &events::EventQueue::dispatch_forever)
+    );
     osStatus inputs_thread_status = inputs_thread.start([&inputs]() {
         while (true) {
             inputs.read();
@@ -76,16 +72,20 @@ int main() {
         // 得られる値を見て実行状況を判断すること
         inputs.read();
     }
+    auto     initialize_event = equeue.event(&output, &OutputMachine::initialize);
+    auto     suspend_event = equeue.event(&output, &OutputMachine::suspend);
+    WatchDog watchdog(&received_input, &suspend_event);
+    equeue.call_every(1s, &watchdog, &WatchDog::check);
     while (true) {
         DeferedDelay _delay(10ms);
         pc.sync();
         uint8_t header = 0;
         ssize_t read = pc.read(&header, 1);
         if (read < 1) {
-            flags.set(TRIGGER_SUSPEND_FLAG);
+            initialize_event.post();
             continue;
         }
-        flags.set(RECEIVED_INPUT_FLAG);
+        received_input.store(true, std::memory_order_release);
         // なぜかこれがないと動かない
         rtos::ThisThread::sleep_for(20ms);
         switch (header) {
@@ -125,11 +125,11 @@ int main() {
             if (output.state() == State::INITIALIZING) {
                 continue;
             }
-            flags.set(TRIGGER_INITIALIZE_FLAG);
+            initialize_event.post();
         } break;
         case 0xFF:
             // suspend
-            flags.set(TRIGGER_SUSPEND_FLAG);
+            suspend_event.post();
             break;
         default:
             // unexpected
