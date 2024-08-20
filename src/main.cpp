@@ -17,36 +17,50 @@ int main() {
     constexpr uint32_t TRIGGER_INITIALIZE_FLAG = 0b0001;
     constexpr uint32_t RECEIVED_INPUT_FLAG = 0b0010;
     constexpr uint32_t TRIGGER_SUSPEND_FLAG = 0b0100;
+    constexpr size_t   INITIALIZE_THREAD_STACK_SIZE = 512;
+    constexpr size_t   SUSPEND_THREAD_STACK_SIZE = 512;
     constexpr size_t   INPUTS_THREAD_STACK_SIZE = 1024;
-    constexpr size_t   WATCH_THREAD_STACK_SIZE = 1024;
 
     CachedInputs         inputs{};
     OutputMachine        output{};
     mbed::BufferedSerial pc(USBTX, USBRX);
 
     rtos::EventFlags flags{};
-    unsigned char    watch_flags_thread_stack[WATCH_THREAD_STACK_SIZE] = {};
+    unsigned char    initialize_thread_stack[INITIALIZE_THREAD_STACK_SIZE] = {};
+    unsigned char    suspend_thread_stack[SUSPEND_THREAD_STACK_SIZE] = {};
     unsigned char    inputs_thread_stack[INPUTS_THREAD_STACK_SIZE] = {};
 
-    rtos::Thread watch_flags_thread(
-        osPriorityBelowNormal, WATCH_THREAD_STACK_SIZE, watch_flags_thread_stack
+    rtos::Thread initialize_thread(
+        osPriorityBelowNormal1, INITIALIZE_THREAD_STACK_SIZE, initialize_thread_stack
+    );
+    rtos::Thread suspend_thread(
+        osPriorityBelowNormal2, SUSPEND_THREAD_STACK_SIZE, suspend_thread_stack
     );
     rtos::Thread inputs_thread(
-        osPriorityBelowNormal, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack
+        osPriorityBelowNormal3, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack
     );
     // TODO: handle osStatus
-    watch_flags_thread.start([&output, &flags]() {
-        constexpr uint32_t WATCH_FLAGS = TRIGGER_INITIALIZE_FLAG | RECEIVED_INPUT_FLAG | TRIGGER_SUSPEND_FLAG;
+    initialize_thread.start([&output, &flags]() {
         while (true) {
-            const uint32_t res = flags.wait_any_for(WATCH_FLAGS, 1s);
-            if ((res & TRIGGER_INITIALIZE_FLAG) != 0) {
+            const uint32_t res = flags.wait_any_for(TRIGGER_INITIALIZE_FLAG, 1s, false);
+            if (res & TRIGGER_INITIALIZE_FLAG) {
                 output.initialize();
-            } else if ((res & RECEIVED_INPUT_FLAG) != 0) {
-                // do nothing
-            } else {
-                // trigger suspend; or received no inputs for 1s
-                output.suspend();
             }
+            flags.clear(TRIGGER_INITIALIZE_FLAG);
+        }
+    });
+    suspend_thread.start([&output, &flags]() {
+        constexpr uint32_t WATCH_FLAGS = TRIGGER_SUSPEND_FLAG | RECEIVED_INPUT_FLAG;
+        while (true) {
+            const uint32_t res = flags.wait_any_for(WATCH_FLAGS, 1s, false);
+            const bool     trigger_suspend = (res & TRIGGER_SUSPEND_FLAG) != 0;
+            const bool     received_input = (res & RECEIVED_INPUT_FLAG) != 0;
+            if (trigger_suspend || !received_input) {
+                output.suspend();
+            } else {
+                // do nothing
+            }
+            flags.clear(WATCH_FLAGS);
         }
     });
     osStatus inputs_thread_status = inputs_thread.start([&inputs]() {
