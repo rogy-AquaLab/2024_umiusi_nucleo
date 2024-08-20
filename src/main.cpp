@@ -4,8 +4,8 @@
 #include <mutex>
 
 #include "BufferedSerial.h"
-#include "events/Event.h"
 #include "events/EventQueue.h"
+#include "events/UserAllocatedEvent.h"
 #include "ThisThread.h"
 #include "Thread.h"
 
@@ -15,25 +15,8 @@
 
 using namespace std::chrono_literals;
 
-class WatchDog {
-private:
-    std::atomic_bool*      received_input;
-    events::Event<void()>* suspend_event;
-
-public:
-    WatchDog(std::atomic_bool* received_input, events::Event<void()>* suspend_event) :
-        received_input(received_input),
-        suspend_event(suspend_event) {}
-
-    void check() {
-        const bool received = this->received_input->load(std::memory_order_acquire);
-        if (!received) {
-            this->suspend_event->post();
-        }
-    }
-};
-
 int main() {
+    constexpr size_t EVENT_QUEUE_SIZE = 32 * EVENTS_EVENT_SIZE;
     constexpr size_t EVENT_LOOP_THREAD_STACK_SIZE = 1024;
     constexpr size_t INPUTS_THREAD_STACK_SIZE = 1024;
 
@@ -42,13 +25,14 @@ int main() {
     mbed::BufferedSerial pc(USBTX, USBRX);
     std::atomic_bool     received_input;
 
-    unsigned char equeue_buffer[1024] = {};
+    unsigned char event_queue_buffer[EVENT_QUEUE_SIZE] = {};
     unsigned char event_loop_thread_stack[EVENT_LOOP_THREAD_STACK_SIZE] = {};
     unsigned char inputs_thread_stack[INPUTS_THREAD_STACK_SIZE] = {};
 
-    events::EventQueue equeue(1024, equeue_buffer);
-    rtos::Thread       event_loop_thread(
-        osPriorityNormal,
+    events::EventQueue equeue(EVENT_QUEUE_SIZE, event_queue_buffer);
+
+    rtos::Thread event_loop_thread(
+        osPriorityBelowNormal,
         EVENT_LOOP_THREAD_STACK_SIZE,
         event_loop_thread_stack,
         "event_loop"
@@ -57,8 +41,9 @@ int main() {
         osPriorityBelowNormal3, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack, "inputs"
     );
     // TODO: handle osStatus
-    event_loop_thread.start(mbed::callback(&equeue, &events::EventQueue::dispatch_forever)
-    );
+    event_loop_thread.start([&equeue]() {
+        equeue.dispatch_forever();
+    });
     osStatus inputs_thread_status = inputs_thread.start([&inputs]() {
         while (true) {
             inputs.read();
@@ -72,17 +57,23 @@ int main() {
         // 得られる値を見て実行状況を判断すること
         inputs.read();
     }
-    auto     initialize_event = equeue.event(&output, &OutputMachine::initialize);
-    auto     suspend_event = equeue.event(&output, &OutputMachine::suspend);
-    WatchDog watchdog(&received_input, &suspend_event);
-    equeue.call_every(1s, &watchdog, &WatchDog::check);
+    auto initialize_event
+        = equeue.make_user_allocated_event(&output, &OutputMachine::initialize);
+    auto suspend_event
+        = equeue.make_user_allocated_event(&output, &OutputMachine::suspend);
+    equeue.call_every(1s, [&suspend_event, &received_input]() {
+        const bool received = received_input.load(std::memory_order_acquire);
+        if (!received) {
+            suspend_event.call();
+        }
+    });
     while (true) {
         DeferedDelay _delay(10ms);
         pc.sync();
         uint8_t header = 0;
         ssize_t read = pc.read(&header, 1);
         if (read < 1) {
-            initialize_event.post();
+            initialize_event.call();
             continue;
         }
         received_input.store(true, std::memory_order_release);
@@ -125,11 +116,11 @@ int main() {
             if (output.state() == State::INITIALIZING) {
                 continue;
             }
-            initialize_event.post();
+            initialize_event.call();
         } break;
         case 0xFF:
             // suspend
-            suspend_event.post();
+            suspend_event.call();
             break;
         default:
             // unexpected
