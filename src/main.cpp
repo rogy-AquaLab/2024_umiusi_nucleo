@@ -83,15 +83,14 @@ int main() {
             return;
         }
     };
-    equeue.call_every(30ms, [&equeue, &pc, &received_order, &process_order]() {
+    equeue.call_every(10ms, [&equeue, &pc, &received_order, &process_order]() {
         std::uint8_t header = 0;
         ssize_t res = pc.read(&header, 1);
         if (res < 1) {
             return;
         }
         received_order.store(true, std::memory_order_release);
-        // FIXME: なぜか20msほど遅らせないとうまくいかない
-        equeue.call_in(20ms, process_order, header);
+        equeue.call(process_order, header);
     });
 
     equeue.call_every(10ms, [&inputs]() {
