@@ -25,7 +25,9 @@ int main() {
     inputs.read();
 
     events::EventQueue equeue(EQUEUE_BUFFER_SIZE, equeue_buffer);
-    auto initialize_event = equeue.event(&output, &OutputMachine::initialize);
+    auto initialize_event = equeue.event(mbed::callback([&output, &equeue]() {
+        output.initialize_with_equeue(equeue);
+    }));
     auto suspend_event = equeue.event(&output, &OutputMachine::suspend);
 
     const auto process_order = [&pc, &inputs, &output, &initialize_event, &suspend_event](std::uint8_t header) {
