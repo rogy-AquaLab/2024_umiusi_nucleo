@@ -29,12 +29,16 @@ void Outputs::deactivate() {
     this->init_status.write(0);
 }
 
-/// ESC の起動待ち
-void Outputs::wake_up() {
-    DeferedDelay _(2s);
+void Outputs::prepare_wake_up(){
     for (mbed::PwmOut& bldc : this->bldcs) {
         bldc.pulsewidth_us(100);
     }
+}
+
+/// ESC の起動待ち
+void Outputs::wake_up() {
+    DeferedDelay _(2s);
+    this->prepare_wake_up();
 }
 
 void Outputs::setup() {
@@ -97,3 +101,19 @@ void OutputMachine::initialize() {
         this->set_state(State::RUNNING);
     }
 }
+
+void OutputMachine::initialize_with_equeue(events::EventQueue& equeue){
+    if (this->state() == State::INITIALIZING) {
+        return;
+    }
+    this->set_state(State::INITIALIZING);
+    this->outputs.reset();
+    this->outputs.activate();
+    this->outputs.prepare_wake_up();
+    equeue.call_in(2s, [this]() {
+        if (this->state() == State::INITIALIZING) {
+            this->set_state(State::RUNNING);
+        }
+    });
+}
+
