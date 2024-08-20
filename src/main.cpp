@@ -5,80 +5,30 @@
 
 #include "BufferedSerial.h"
 #include "events/EventQueue.h"
-#include "events/UserAllocatedEvent.h"
-#include "ThisThread.h"
-#include "Thread.h"
+#include "events/Event.h"
 
-#include "umiusi/defered_delay.hpp"
 #include "umiusi/inputs.hpp"
 #include "umiusi/outputs.hpp"
 
 using namespace std::chrono_literals;
 
 int main() {
-    constexpr size_t EVENT_QUEUE_SIZE = 32 * EVENTS_EVENT_SIZE;
-    constexpr size_t EVENT_LOOP_THREAD_STACK_SIZE = 1024;
-    constexpr size_t INPUTS_THREAD_STACK_SIZE = 1024;
+    constexpr std::size_t EQUEUE_BUFFER_SIZE = 32 * EVENTS_EVENT_SIZE;
+
+    unsigned char equeue_buffer[EQUEUE_BUFFER_SIZE] = {};
 
     CachedInputs         inputs{};
     OutputMachine        output{};
     mbed::BufferedSerial pc(USBTX, USBRX);
     std::atomic_bool     received_input;
+    pc.set_blocking(false);
+    inputs.read();
 
-    unsigned char event_queue_buffer[EVENT_QUEUE_SIZE] = {};
-    unsigned char event_loop_thread_stack[EVENT_LOOP_THREAD_STACK_SIZE] = {};
-    unsigned char inputs_thread_stack[INPUTS_THREAD_STACK_SIZE] = {};
+    events::EventQueue equeue(EQUEUE_BUFFER_SIZE, equeue_buffer);
+    auto initialize_event = equeue.event(&output, &OutputMachine::initialize);
+    auto suspend_event = equeue.event(&output, &OutputMachine::suspend);
 
-    events::EventQueue equeue(EVENT_QUEUE_SIZE, event_queue_buffer);
-
-    rtos::Thread event_loop_thread(
-        osPriorityBelowNormal,
-        EVENT_LOOP_THREAD_STACK_SIZE,
-        event_loop_thread_stack,
-        "event_loop"
-    );
-    rtos::Thread inputs_thread(
-        osPriorityBelowNormal3, INPUTS_THREAD_STACK_SIZE, inputs_thread_stack, "inputs"
-    );
-    // TODO: handle osStatus
-    event_loop_thread.start([&equeue]() {
-        equeue.dispatch_forever();
-    });
-    osStatus inputs_thread_status = inputs_thread.start([&inputs]() {
-        while (true) {
-            inputs.read();
-            rtos::ThisThread::sleep_for(10ms);
-        }
-    });
-    if (inputs_thread_status != osOK) {
-        // 本来ここに入ることはあってはならないが、一応書いておく
-        // スレッドを開始することができなかったので、入力が読み取られなくなる
-        // そのため、一度だけ値を読んでおくことにする
-        // 得られる値を見て実行状況を判断すること
-        inputs.read();
-    }
-    auto initialize_event
-        = equeue.make_user_allocated_event(&output, &OutputMachine::initialize);
-    auto suspend_event
-        = equeue.make_user_allocated_event(&output, &OutputMachine::suspend);
-    equeue.call_every(1s, [&suspend_event, &received_input]() {
-        const bool received = received_input.load(std::memory_order_acquire);
-        if (!received) {
-            suspend_event.call();
-        }
-    });
-    while (true) {
-        DeferedDelay _delay(10ms);
-        pc.sync();
-        uint8_t header = 0;
-        ssize_t read = pc.read(&header, 1);
-        if (read < 1) {
-            initialize_event.call();
-            continue;
-        }
-        received_input.store(true, std::memory_order_release);
-        // なぜかこれがないと動かない
-        rtos::ThisThread::sleep_for(20ms);
+    const auto process_order = [&pc, &inputs, &output, &initialize_event, &suspend_event](std::uint8_t header) {
         switch (header) {
         case 0: {
             // write
@@ -114,7 +64,7 @@ int main() {
         case 0xFE: {
             // (re)start
             if (output.state() == State::INITIALIZING) {
-                continue;
+                return;
             }
             initialize_event.call();
         } break;
@@ -124,8 +74,32 @@ int main() {
             break;
         default:
             // unexpected
-            continue;
+            return;
         }
-    }
+    };
+    equeue.call_every(30ms, [&equeue, &pc, &received_input, &process_order]() {
+        std::uint8_t header = 0;
+        ssize_t res = pc.read(&header, 1);
+        if (res < 1) {
+            return;
+        }
+        received_input.store(true, std::memory_order_release);
+        // FIXME: なぜか20msほど遅らせないとうまくいかない
+        equeue.call_in(20ms, process_order, header);
+    });
+
+    equeue.call_every(10ms, [&inputs]() {
+        inputs.read();
+    });
+
+    equeue.call_every(1s, [&received_input, &suspend_event]() {
+        const bool received = received_input.load(std::memory_order_acquire);
+        received_input.store(false, std::memory_order_release);
+        if (!received) {
+            suspend_event.call();
+        }
+    });
+
+    equeue.dispatch_forever();
     return 0;
 }
