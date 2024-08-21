@@ -83,7 +83,7 @@ int main() {
             return;
         }
     };
-    equeue.call_every(10ms, [&equeue, &pc, &received_order, &process_order]() {
+    equeue.call_every(30ms, [&equeue, &pc, &received_order, &process_order]() {
         std::uint8_t header = 0;
         ssize_t res = pc.read(&header, 1);
         if (res < 1) {
