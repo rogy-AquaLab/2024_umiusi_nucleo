@@ -7,6 +7,7 @@
 #include <DigitalOut.h>
 #include <Mutex.h>
 #include <PwmOut.h>
+#include <events/EventQueue.h>
 
 #include "umiusi/state.hpp"
 
@@ -81,11 +82,7 @@ public:
     Outputs();
     void activate();
     void deactivate();
-    /// BLDC(に繋がっているESC)を起動する。完了までに2秒を要する。
-    /// 完了時点でbldcのパルス幅は各100usとなる
-    void wake_up();
-    /// activate->wake_up
-    void setup();
+    void prepare_wake_up();
     void set_powers(
         const std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM>& pulsewidths_us
     );
@@ -107,7 +104,7 @@ public:
         const std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM>& pulsewidths_us
     );
     void suspend();
-    void initialize();
+    void initialize_with_equeue(events::EventQueue& equeue);
 };
 
 #endif
