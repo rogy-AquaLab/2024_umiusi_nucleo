@@ -9,7 +9,8 @@ sequenceDiagram
     participant RPi as Raspberry Pi
     participant N as Nucleo
     RPi ->>+ N: Request sensors' data `0x01`
-    N ->>- RPi: Return data
+    N ->> RPi: Return data
+    N ->>- RPi: Echo back header `0x01`
 ```
 
 ```mermaid
@@ -18,7 +19,8 @@ sequenceDiagram
     participant N as Nucleo
     RPi ->>+ N: Notify sending power data `0x00`
     RPi ->> N: Send power data
-    N -->>- RPi: Receive data
+    N -->> RPi: Receive data
+    N ->>- RPi: Echo back header `0x00`
 ```
 
 ```mermaid
@@ -26,7 +28,8 @@ sequenceDiagram
     participant RPi as Raspberry Pi
     participant N as Nucleo
     RPi ->>+ N: Request nucleo's status `0x02`
-    N ->>- RPi: Return data
+    N ->> RPi: Return data
+    N ->>- RPi: Echo back header `0x02`
 ```
 
 ```mermaid
@@ -34,7 +37,8 @@ sequenceDiagram
     participant RPi as Raspberry Pi
     participant N as Nucleo
     RPi ->>+ N: Request (re)starting `0xFE`
-    N -->>- RPi: Trigger (re)start
+    N -->> RPi: Trigger (re)start
+    N ->>- RPi: Echo back header `0xFE`
 ```
 
 ```mermaid
@@ -42,7 +46,8 @@ sequenceDiagram
     participant RPi as Raspberry Pi
     participant N as Nucleo
     RPi ->>+ N: Request suspending `0xFF`
-    N -->>- RPi: Abort immediately
+    N -->> RPi: Abort immediately
+    N ->>- RPi: Echo back header `0xFF`
 ```
 
 ## Data contents

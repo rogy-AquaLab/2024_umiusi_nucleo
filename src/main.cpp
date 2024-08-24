@@ -27,14 +27,12 @@ int main() {
     inputs.read();
 
     events::EventQueue equeue(EQUEUE_BUFFER_SIZE, equeue_buffer);
-    auto initialize_event = equeue.event(mbed::callback([&output, &equeue]() {
+
+    auto trigger_initialize = [&output, &equeue]() {
         if (output.state() != State::INITIALIZING) {
             output.initialize_with_equeue(equeue);
         }
-    }));
-    auto suspend_event = equeue.event(mbed::callback([&output]() {
-        output.suspend();
-    }));
+    };
 
     auto write_order_event = equeue.event(mbed::callback([&pc, &pc_mutex, &output]() {
         std::lock_guard<rtos::Mutex> _guard(pc_mutex);
@@ -55,30 +53,44 @@ int main() {
                                        | (pulsewidth_us_msb << 8);
         }
         output.set_powers(pulsewidths_us);
+        pc.write("\x00", 1);
     }));
     auto read_order_event = equeue.event(mbed::callback([&pc, &pc_mutex, &inputs]() {
         std::lock_guard<rtos::Mutex> _guard(pc_mutex);
         std::array<uint8_t, 8>       buffer = inputs.get().packet_data();
         pc.write(buffer.data(), 8);
+        pc.write("\x01", 1);
     }));
     auto read_state_order_event
         = equeue.event(mbed::callback([&pc, &pc_mutex, &output]() {
               std::lock_guard<rtos::Mutex> _guard(pc_mutex);
               uint8_t state_val = static_cast<uint8_t>(output.state());
               pc.write(&state_val, 1);
+              pc.write("\x02", 1);
           }));
+    auto initialize_order_event
+        = equeue.event(mbed::callback([&pc, &pc_mutex, &trigger_initialize]() {
+              std::lock_guard<rtos::Mutex> _guard(pc_mutex);
+              trigger_initialize();
+              pc.write("\xFE", 1);
+          }));
+    auto suspend_order_event = equeue.event(mbed::callback([&pc, &pc_mutex, &output]() {
+        std::lock_guard<rtos::Mutex> _guard(pc_mutex);
+        output.suspend();
+        pc.write("\xFF", 1);
+    }));
 
     const auto process_order = [&write_order_event,
                                 &read_order_event,
                                 &read_state_order_event,
-                                &initialize_event,
-                                &suspend_event](std::uint8_t header) {
+                                &initialize_order_event,
+                                &suspend_order_event](std::uint8_t header) {
         switch (header) {
         case 0:    write_order_event.call(); break;
         case 1:    read_order_event.call(); break;
         case 2:    read_state_order_event.call(); break;
-        case 0xFE: initialize_event.call(); break;
-        case 0xFF: suspend_event.call(); break;
+        case 0xFE: initialize_order_event.call(); break;
+        case 0xFF: suspend_order_event.call(); break;
         default:
             // unexpected
             return;
@@ -103,11 +115,11 @@ int main() {
         inputs.read();
     });
 
-    equeue.call_every(1s, [&received_order, &suspend_event]() {
+    equeue.call_every(1s, [&received_order, &output]() {
         const bool received = received_order.load(std::memory_order_acquire);
         received_order.store(false, std::memory_order_release);
         if (!received) {
-            suspend_event.call();
+            output.suspend();
         }
     });
 
