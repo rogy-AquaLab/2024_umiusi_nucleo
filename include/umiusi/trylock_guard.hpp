@@ -1,11 +1,10 @@
 #ifndef UMIUSI_TRYLOCK_GUARD_HPP
 #define UMIUSI_TRYLOCK_GUARD_HPP
 
-template <typename Mutex>
-class TrylockGuard {
+template<typename Mutex> class TrylockGuard {
 private:
     Mutex& _mutex;
-    bool         _locked;
+    bool   _locked;
 
 public:
     TrylockGuard(Mutex& mutex) : _mutex(mutex) {

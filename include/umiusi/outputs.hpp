@@ -5,9 +5,9 @@
 #include <mutex>
 
 #include <DigitalOut.h>
+#include <events/EventQueue.h>
 #include <Mutex.h>
 #include <PwmOut.h>
-#include <events/EventQueue.h>
 
 #include "umiusi/state.hpp"
 
