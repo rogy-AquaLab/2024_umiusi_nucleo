@@ -84,6 +84,7 @@ int main() {
             return;
         }
     };
+    // FIXME: なぜか30msより短いと挙動がおかしくなる
     equeue.call_every(30ms, [&equeue, &pc, &pc_mutex, &received_order, &process_order]() {
         TrylockGuard pc_guard(pc_mutex);
         if (!pc_guard.locked()) {
