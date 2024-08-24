@@ -12,6 +12,27 @@
 
 using namespace std::chrono_literals;
 
+class TrylockGuard {
+private:
+    rtos::Mutex& _mutex;
+    bool         _locked;
+
+public:
+    TrylockGuard(rtos::Mutex& mutex) : _mutex(mutex) {
+        this->_locked = this->_mutex.trylock();
+    }
+
+    ~TrylockGuard() {
+        if (this->_locked) {
+            this->_mutex.unlock();
+        }
+    }
+
+    auto locked() const -> bool {
+        return this->_locked;
+    }
+};
+
 int main() {
     constexpr std::size_t EQUEUE_BUFFER_SIZE = 32 * EVENTS_EVENT_SIZE;
 
