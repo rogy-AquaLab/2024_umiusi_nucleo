@@ -4,8 +4,8 @@
 #include <mutex>
 
 #include "BufferedSerial.h"
-#include "events/EventQueue.h"
 #include "events/Event.h"
+#include "events/EventQueue.h"
 
 #include "umiusi/inputs.hpp"
 #include "umiusi/outputs.hpp"
@@ -34,50 +34,45 @@ int main() {
         output.suspend();
     }));
 
-    const auto process_order = [&pc, &inputs, &output, &initialize_event, &suspend_event](std::uint8_t header) {
+    auto write_order_event = equeue.event(mbed::callback([&pc, &output]() {
+        std::array<uint8_t, 16> buffer{}; // FIXME: 16 == THRUSTER_NUM * 2 * 2
+        pc.read(buffer.data(), 16);
+        std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM> pulsewidths_us{};
+        for (size_t i = 0; i < THRUSTER_NUM; ++i) {
+            // bldc
+            uint16_t pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0]);
+            uint16_t pulsewidth_us_msb = static_cast<uint16_t>(buffer[i * 2 + 1]);
+            pulsewidths_us[i].first = (pulsewidth_us_lsb << 0) | (pulsewidth_us_msb << 8);
+            // servo
+            pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0 + THRUSTER_NUM * 2]
+            );
+            pulsewidth_us_msb = static_cast<uint16_t>(buffer[i * 2 + 1 + THRUSTER_NUM * 2]
+            );
+            pulsewidths_us[i].second = (pulsewidth_us_lsb << 0)
+                                       | (pulsewidth_us_msb << 8);
+        }
+        output.set_powers(pulsewidths_us);
+    }));
+    auto read_order_event = equeue.event(mbed::callback([&pc, &inputs]() {
+        std::array<uint8_t, 8> buffer = inputs.get().packet_data();
+        pc.write(buffer.data(), 8);
+    }));
+    auto read_state_order_event = equeue.event(mbed::callback([&pc, &output]() {
+        uint8_t state_val = static_cast<uint8_t>(output.state());
+        pc.write(&state_val, 1);
+    }));
+
+    const auto process_order = [&write_order_event,
+                                &read_order_event,
+                                &read_state_order_event,
+                                &initialize_event,
+                                &suspend_event](std::uint8_t header) {
         switch (header) {
-        case 0: {
-            // write
-            std::array<uint8_t, 16> buffer{}; // FIXME: 16 == THRUSTER_NUM * 2 * 2
-            pc.read(buffer.data(), 16);
-            std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM> pulsewidths_us{};
-            for (size_t i = 0; i < THRUSTER_NUM; ++i) {
-                // bldc
-                uint16_t pulsewidth_us_lsb = static_cast<uint16_t>(buffer[i * 2 + 0]);
-                uint16_t pulsewidth_us_msb = static_cast<uint16_t>(buffer[i * 2 + 1]);
-                pulsewidths_us[i].first = (pulsewidth_us_lsb << 0)
-                                          | (pulsewidth_us_msb << 8);
-                // servo
-                pulsewidth_us_lsb
-                    = static_cast<uint16_t>(buffer[i * 2 + 0 + THRUSTER_NUM * 2]);
-                pulsewidth_us_msb
-                    = static_cast<uint16_t>(buffer[i * 2 + 1 + THRUSTER_NUM * 2]);
-                pulsewidths_us[i].second = (pulsewidth_us_lsb << 0)
-                                           | (pulsewidth_us_msb << 8);
-            }
-            output.set_powers(pulsewidths_us);
-        } break;
-        case 1: {
-            // read
-            std::array<uint8_t, 8> buffer = inputs.get().packet_data();
-            pc.write(buffer.data(), 8);
-        } break;
-        case 2: {
-            // read state
-            uint8_t state_val = static_cast<uint8_t>(output.state());
-            pc.write(&state_val, 1);
-        } break;
-        case 0xFE: {
-            // (re)start
-            if (output.state() == State::INITIALIZING) {
-                return;
-            }
-            initialize_event.call();
-        } break;
-        case 0xFF:
-            // suspend
-            suspend_event.call();
-            break;
+        case 0:    write_order_event.call(); break;
+        case 1:    read_order_event.call(); break;
+        case 2:    read_state_order_event.call(); break;
+        case 0xFE: initialize_event.call(); break;
+        case 0xFF: suspend_event.call(); break;
         default:
             // unexpected
             return;
@@ -85,7 +80,7 @@ int main() {
     };
     equeue.call_every(30ms, [&equeue, &pc, &received_order, &process_order]() {
         std::uint8_t header = 0;
-        ssize_t res = pc.read(&header, 1);
+        ssize_t      res = pc.read(&header, 1);
         if (res < 1) {
             return;
         }
