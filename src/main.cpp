@@ -41,6 +41,7 @@ int main() {
     CachedInputs         inputs{};
     OutputMachine        output{};
     mbed::BufferedSerial pc(USBTX, USBRX);
+    rtos::Mutex          pc_mutex{};
     std::atomic_bool     received_order;
     pc.set_blocking(false);
     inputs.read();
@@ -55,8 +56,9 @@ int main() {
         output.suspend();
     }));
 
-    auto write_order_event = equeue.event(mbed::callback([&pc, &output]() {
-        std::array<uint8_t, 16> buffer{}; // FIXME: 16 == THRUSTER_NUM * 2 * 2
+    auto write_order_event = equeue.event(mbed::callback([&pc, &pc_mutex, &output]() {
+        std::lock_guard<rtos::Mutex> _guard(pc_mutex);
+        std::array<uint8_t, 16>      buffer{}; // FIXME: 16 == THRUSTER_NUM * 2 * 2
         pc.read(buffer.data(), 16);
         std::array<std::pair<uint16_t, uint16_t>, THRUSTER_NUM> pulsewidths_us{};
         for (size_t i = 0; i < THRUSTER_NUM; ++i) {
@@ -74,14 +76,17 @@ int main() {
         }
         output.set_powers(pulsewidths_us);
     }));
-    auto read_order_event = equeue.event(mbed::callback([&pc, &inputs]() {
-        std::array<uint8_t, 8> buffer = inputs.get().packet_data();
+    auto read_order_event = equeue.event(mbed::callback([&pc, &pc_mutex, &inputs]() {
+        std::lock_guard<rtos::Mutex> _guard(pc_mutex);
+        std::array<uint8_t, 8>       buffer = inputs.get().packet_data();
         pc.write(buffer.data(), 8);
     }));
-    auto read_state_order_event = equeue.event(mbed::callback([&pc, &output]() {
-        uint8_t state_val = static_cast<uint8_t>(output.state());
-        pc.write(&state_val, 1);
-    }));
+    auto read_state_order_event
+        = equeue.event(mbed::callback([&pc, &pc_mutex, &output]() {
+              std::lock_guard<rtos::Mutex> _guard(pc_mutex);
+              uint8_t state_val = static_cast<uint8_t>(output.state());
+              pc.write(&state_val, 1);
+          }));
 
     const auto process_order = [&write_order_event,
                                 &read_order_event,
@@ -99,7 +104,11 @@ int main() {
             return;
         }
     };
-    equeue.call_every(30ms, [&equeue, &pc, &received_order, &process_order]() {
+    equeue.call_every(30ms, [&equeue, &pc, &pc_mutex, &received_order, &process_order]() {
+        TrylockGuard pc_guard(pc_mutex);
+        if (!pc_guard.locked()) {
+            return;
+        }
         std::uint8_t header = 0;
         ssize_t      res = pc.read(&header, 1);
         if (res < 1) {
